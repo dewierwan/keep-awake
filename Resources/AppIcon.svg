@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <!-- Blue rounded square with a white line drawing of an open eye. -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#1144CC"/>
+  <g fill="none" stroke="#FFFFFF" stroke-width="46" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M232 512C318 384 410 326 512 326s194 58 280 186c-86 128-178 186-280 186s-194-58-280-186Z"/>
+    <circle cx="512" cy="512" r="84"/>
+  </g>
+</svg>
