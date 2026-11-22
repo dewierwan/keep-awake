@@ -47,7 +47,21 @@ It has no always-on mode, so the Mac cannot be left awake by accident.
 
 ## Install
 
-You need macOS 13 or later and the Xcode Command Line Tools (`xcode-select --install`). Full Xcode is not needed.
+You need macOS 13 or later.
+
+### With Homebrew
+
+```sh
+brew install dewierwan/tap/keep-awake && brew services start dewierwan/tap/keep-awake
+```
+
+Homebrew builds the app on your Mac, which takes about a minute, then starts it now and at every login.
+
+To update, run `brew upgrade dewierwan/tap/keep-awake && brew services restart dewierwan/tap/keep-awake`.
+
+### From source
+
+You need the Xcode Command Line Tools (`xcode-select --install`). Full Xcode is not needed.
 
 ```sh
 git clone https://github.com/dewierwan/keep-awake.git
@@ -56,6 +70,8 @@ Scripts/install.sh
 ```
 
 This builds the app, copies it to `/Applications/Keep Awake.app`, and starts it. Run the same script again to update.
+
+### After installing
 
 The app is built and signed on your own Mac, so there is no download to trust and no Gatekeeper warning.
 
@@ -122,11 +138,19 @@ sudo pmset -a disablesleep 0           # allow sleep again
 
 ## Uninstall
 
+If you installed from source:
+
 ```sh
 Scripts/uninstall.sh
 ```
 
 This stops the app and removes the app, its login entry, its settings, and the Survive unplugging rule if you turned that on.
+
+If you installed with Homebrew, turn Survive unplugging off in Settings first, then:
+
+```sh
+brew services stop dewierwan/tap/keep-awake && brew uninstall dewierwan/tap/keep-awake
+```
 
 ## How it is built
 

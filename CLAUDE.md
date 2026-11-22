@@ -17,3 +17,9 @@ A macOS menu bar app that keeps a MacBook awake for a set time, lid open or clos
 - Do not use `@State`. It needs a compiler plugin that ships only with full Xcode. Use `@StateObject` with a small `ObservableObject`.
 - To check a change to the switch, read the kernel log, as the last section of the README shows. The `AppleClamshellCausesSleep` property in `ioreg` is not updated live, so do not rely on it.
 - Design tokens live in `Theme.swift`. State is shown with shape and text, never with red or green.
+
+## Releasing
+
+1. Set the new version in `Resources/Info.plist` (`CFBundleShortVersionString`, and add one to `CFBundleVersion`), commit and push.
+2. Tag it (`git tag -a v1.2.3 -m "Keep Awake 1.2.3"`) and push the tag. The Release workflow publishes a signed download once the signing secrets exist; until then it only builds an unsigned rehearsal.
+3. Update the Homebrew formula in the `dewierwan/homebrew-tap` repository (`Formula/keep-awake.rb`): the `url` for the new tag and the `sha256` of that archive (`curl -sL <url> | shasum -a 256`). Test with `brew install dewierwan/tap/keep-awake`, then push.
