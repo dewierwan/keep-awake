@@ -207,7 +207,8 @@ enum Main {
         let defaults = Bundle.main.bundleIdentifier == bundleID
             ? UserDefaults.standard : (UserDefaults(suiteName: bundleID) ?? .standard)
         let end = defaults.double(forKey: "SessionEndDate")
-        print("External display connected: \(text(Machine.externalDisplayConnected))")
+        print("At a desk:                  \(text(Machine.atDesk)) (mains power: \(text(Machine.onMainsPower)))")
+        print("Displays:                   \(Machine.displaySummary)")
         print("Lid closed:                 \(text(Machine.lidClosed))")
         print("On battery at:              \(Machine.batteryPercentWhileOnBattery.map { "\($0)%" } ?? "not on battery")")
         print("Session running:            \(text(end > Date().timeIntervalSince1970))")

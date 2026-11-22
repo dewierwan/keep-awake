@@ -69,14 +69,44 @@ final class SleepBlocker {
 
 /// Facts about the Mac that the session rules depend on.
 enum Machine {
-    /// True when a display other than the built-in one is connected, awake or
-    /// asleep. This is what "at a desk" means in this app.
-    static var externalDisplayConnected: Bool {
+    /// True when the Mac is set up as a desktop: on mains power, with a display
+    /// other than the built-in one. This is when macOS itself keeps a closed
+    /// Mac awake, so it is when the lid switch belongs to macOS.
+    ///
+    /// Mains power is part of the test for a safety reason. With the lid closed
+    /// and nothing plugged in, macOS creates a stand-in display that is not
+    /// built in, so a display check alone would call a Mac in a bag "at a desk"
+    /// and leave it awake after a session ends. A Mac in a bag is on battery.
+    static var atDesk: Bool { onMainsPower && !otherDisplays.isEmpty }
+
+    static var onMainsPower: Bool {
+        guard let info = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let providing = IOPSGetProvidingPowerSourceType(info)?.takeUnretainedValue() as String?
+        else { return false }
+        return providing == kIOPSACPowerValue
+    }
+
+    /// Displays that are connected, awake or asleep, and are not the built-in one.
+    static var otherDisplays: [CGDirectDisplayID] {
         var count: UInt32 = 0
-        guard CGGetOnlineDisplayList(0, nil, &count) == .success, count > 0 else { return false }
+        guard CGGetOnlineDisplayList(0, nil, &count) == .success, count > 0 else { return [] }
         var displays = [CGDirectDisplayID](repeating: 0, count: Int(count))
-        guard CGGetOnlineDisplayList(count, &displays, &count) == .success else { return false }
-        return displays.prefix(Int(count)).contains { CGDisplayIsBuiltin($0) == 0 }
+        guard CGGetOnlineDisplayList(count, &displays, &count) == .success else { return [] }
+        return displays.prefix(Int(count)).filter { CGDisplayIsBuiltin($0) == 0 }
+    }
+
+    /// One line describing every connected display, for the log and `--status`.
+    static var displaySummary: String {
+        var count: UInt32 = 0
+        guard CGGetOnlineDisplayList(0, nil, &count) == .success, count > 0 else { return "none" }
+        var displays = [CGDirectDisplayID](repeating: 0, count: Int(count))
+        guard CGGetOnlineDisplayList(count, &displays, &count) == .success else { return "none" }
+        return displays.prefix(Int(count)).map { id in
+            let kind = CGDisplayIsBuiltin(id) != 0 ? "built-in" : "other"
+            let size = CGDisplayScreenSize(id)
+            return "\(kind) id=\(id) vendor=\(CGDisplayVendorNumber(id)) model=\(CGDisplayModelNumber(id)) "
+                + "\(CGDisplayPixelsWide(id))x\(CGDisplayPixelsHigh(id)) \(Int(size.width))x\(Int(size.height))mm"
+        }.joined(separator: "; ")
     }
 
     /// Battery charge in percent while running on battery; nil on mains power

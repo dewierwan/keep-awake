@@ -26,10 +26,12 @@ Keep Awake follows one rule to avoid this:
 
 | When a session ends and… | Keep Awake… |
 |---|---|
-| an external display is connected | leaves the switch alone, because macOS is using it |
-| no external display is connected | turns the switch off, so the Mac sleeps as normal |
+| the Mac is at a desk (mains power and an external display) | leaves the switch alone, because macOS is using it |
+| the Mac is anywhere else | turns the switch off, so the Mac sleeps as normal |
 
-If a session ends at a desk, Keep Awake remembers that it still owes the switch a turn-off, and does it once you unplug the display.
+If a session ends at a desk, Keep Awake remembers that it still owes the switch a turn-off, and does it once you unplug.
+
+Mains power is part of the test on purpose. With the lid closed and nothing plugged in, macOS creates a stand-in display, so a display check alone would treat a Mac in a bag as a Mac at a desk.
 
 ## What it does
 

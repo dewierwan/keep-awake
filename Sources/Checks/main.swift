@@ -20,12 +20,12 @@ func expect(_ condition: Bool, _ what: String, line: UInt = #line) {
 for docked in [true, false] {
     for ours in [true, false] {
         expect(
-            lidAction(sessionActive: true, externalDisplayConnected: docked, weTurnedItOn: ours) == .hold,
+            lidAction(sessionActive: true, atDesk: docked, weTurnedItOn: ours) == .hold,
             "a running session always holds the switch"
         )
     }
     expect(
-        lidAction(sessionActive: false, externalDisplayConnected: docked, weTurnedItOn: false) == .leaveAlone,
+        lidAction(sessionActive: false, atDesk: docked, weTurnedItOn: false) == .leaveAlone,
         "we never turn off a switch we did not turn on"
     )
 }
@@ -33,11 +33,11 @@ for docked in [true, false] {
 // The bug this app exists to fix: turning the switch off at a desk puts the
 // Mac to sleep mid-work, because macOS was relying on it too.
 expect(
-    lidAction(sessionActive: false, externalDisplayConnected: true, weTurnedItOn: true) == .leaveAlone,
+    lidAction(sessionActive: false, atDesk: true, weTurnedItOn: true) == .leaveAlone,
     "ending a session at a desk leaves the switch for macOS"
 )
 expect(
-    lidAction(sessionActive: false, externalDisplayConnected: false, weTurnedItOn: true) == .release,
+    lidAction(sessionActive: false, atDesk: false, weTurnedItOn: true) == .release,
     "ending a session away from a desk turns the switch off"
 )
 

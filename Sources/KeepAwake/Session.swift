@@ -1,6 +1,7 @@
 import AppKit
 import Combine
 import Foundation
+import IOKit.ps
 import KeepAwakeCore
 
 /// Settings a person can change with `defaults write com.dewierwan.keep-awake`.
@@ -39,6 +40,9 @@ final class Session: ObservableObject {
     private let blocker = SleepBlocker()
     private var timer: Timer?
     private var ticks = 0
+    private var lastLoggedAction: LidAction?
+    private var lastLoggedAtDesk: Bool?
+    private var powerSource: CFRunLoopSource?
     private let defaults = UserDefaults.standard
 
     private enum Key {
@@ -62,6 +66,16 @@ final class Session: ObservableObject {
                            name: NSApplication.didChangeScreenParametersNotification, object: nil)
         NSWorkspace.shared.notificationCenter.addObserver(
             self, selector: #selector(didWake), name: NSWorkspace.didWakeNotification, object: nil)
+
+        // Plugging in or unplugging power changes whether the Mac is at a desk.
+        let context = Unmanaged.passUnretained(self).toOpaque()
+        if let source = IOPSNotificationCreateRunLoopSource({ context in
+            guard let context else { return }
+            Unmanaged<Session>.fromOpaque(context).takeUnretainedValue().applyLidPolicySoon()
+        }, context)?.takeRetainedValue() {
+            CFRunLoopAddSource(CFRunLoopGetMain(), source, .defaultMode)
+            powerSource = source
+        }
     }
 
     /// Picks up a session that was running when the app last exited without
@@ -141,11 +155,17 @@ final class Session: ObservableObject {
 
     /// Sets the lid switch to what `lidAction` says. Safe to call at any time.
     private func applyLidPolicy() {
-        let action = lidAction(
-            sessionActive: isActive,
-            externalDisplayConnected: Machine.externalDisplayConnected,
-            weTurnedItOn: lidSwitchIsOurs
-        )
+        let atDesk = Machine.atDesk
+        let action = lidAction(sessionActive: isActive, atDesk: atDesk, weTurnedItOn: lidSwitchIsOurs)
+        if action != lastLoggedAction || atDesk != lastLoggedAtDesk {
+            // The facts behind the decision, so a wrong one can be traced later.
+            log.notice("""
+                Lid policy: \(String(describing: action), privacy: .public), session=\(self.isActive), \
+                atDesk=\(atDesk), mains=\(Machine.onMainsPower), displays=[\(Machine.displaySummary, privacy: .public)]
+                """)
+            lastLoggedAction = action
+            lastLoggedAtDesk = atDesk
+        }
         switch action {
         case .hold:
             // Record first: if we crash right after the call, the next launch must still know.
@@ -158,9 +178,10 @@ final class Session: ObservableObject {
         }
     }
 
+    /// Called when displays or power change, and after waking.
     /// Applies the lid policy now and again shortly after, because macOS makes
     /// its own change to the switch a moment after these events.
-    private func applyLidPolicySoon() {
+    func applyLidPolicySoon() {
         if isActive {
             applyLidPolicy()
             for delay in [2.0, 10.0] {
