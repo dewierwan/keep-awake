@@ -6,10 +6,10 @@ import SwiftUI
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let session = Session()
     private let hotkey = Hotkey()
+    private let panel = PanelModel()
     private var statusItem: NSStatusItem!
     private let popover = NSPopover()
     private var subscriptions: Set<AnyCancellable> = []
-    private var hotkeyRetry: Timer?
     private var termination: DispatchSourceSignal?
     private var shownActive = false
 
@@ -34,7 +34,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         hotkey.onPress = { [weak self] in
             self?.session.start(minutes: Settings.defaultMinutes)
         }
-        registerHotkey()
+        panel.applyHotkey = { [weak self] spec in self?.hotkey.set(spec) ?? false }
+        if let spec = Settings.hotkey, !hotkey.set(spec) {
+            log.error("macOS would not accept the shortcut \(spec.display, privacy: .public)")
+        }
 
         // `KeepAwake --start 20` and `KeepAwake --stop` in a terminal reach the
         // running app through this notification.
@@ -58,33 +61,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         source.resume()
         termination = source
 
+        LoginItem.prepareAtLaunch()
         session.resumeAfterLaunch()
         refreshStatusItem()
     }
 
     func applicationWillTerminate(_ notification: Notification) {
         session.stop()
-    }
-
-    private func registerHotkey() {
-        guard let spec = Settings.hotkey, !hotkey.register(spec) else { return }
-        // Another app holds the shortcut. Keep trying, so it starts working as
-        // soon as that app lets go of it.
-        log.notice("Shortcut \(spec.display, privacy: .public) is taken by another app; will retry")
-        let timer = Timer(timeInterval: 30, repeats: true) { [weak self] timer in
-            guard let self else { return }
-            if self.hotkey.register(spec) {
-                log.notice("Shortcut \(spec.display, privacy: .public) registered")
-                timer.invalidate()
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        hotkeyRetry = timer
-    }
-
-    private var hotkeyHint: String? {
-        guard let spec = Settings.hotkey else { return nil }
-        return "\(spec.display) starts \(TimeText.length(minutes: Settings.defaultMinutes))"
     }
 
     private func refreshStatusItem() {
@@ -112,8 +95,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             return
         }
         guard let button = statusItem.button else { return }
+        panel.refresh()
         let controller = NSHostingController(
-            rootView: PanelView(session: session, hotkeyHint: hotkeyHint, quit: { NSApp.terminate(nil) })
+            rootView: PanelView(session: session, model: panel, quit: { NSApp.terminate(nil) })
         )
         controller.sizingOptions = .preferredContentSize
         popover.contentViewController = controller
@@ -125,6 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     }
 
     func popoverDidClose(_ notification: Notification) {
+        panel.stopRecording()
         popover.contentViewController = nil
     }
 }
@@ -179,6 +164,19 @@ enum Main {
             DistributedNotificationCenter.default().postNotificationName(
                 Command.notification, object: command.text, userInfo: nil, deliverImmediately: true
             )
+            return
+        }
+        if arguments.first == "--login" {
+            switch arguments.dropFirst().first {
+            case "on", "off":
+                do {
+                    try LoginItem.set(on: arguments.dropFirst().first == "on")
+                } catch {
+                    print("Could not change it: \(error.localizedDescription)")
+                }
+            default: break
+            }
+            print("Open at login: \(LoginItem.isOn ? "on" : "off")")
             return
         }
         if arguments.first == "--snapshots", let directory = arguments.dropFirst().first {

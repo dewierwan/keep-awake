@@ -12,6 +12,7 @@ A macOS menu bar app that keeps a MacBook awake for a set time, lid open or clos
 ## Rules
 
 - Never turn the lid switch off (`LidSwitch.set(on: false)`) while an external display is connected. With the lid closed this puts the Mac to sleep at once, in the middle of the owner's work. `lidAction` in `Sources/KeepAwakeCore/LidPolicy.swift` is the only place that decides, and its tests must keep passing.
+- "Open at login" is a launch agent file the app writes itself (`LoginItem.swift`). `SMAppService` was tried and macOS refuses to start a locally signed app from it (exit code 78).
 - Do not use `@State`. It needs a compiler plugin that ships only with full Xcode. Use `@StateObject` with a small `ObservableObject`.
 - To check a change to the switch, read the kernel log, as the last section of the README shows. The `AppleClamshellCausesSleep` property in `ioreg` is not updated live, so do not rely on it.
 - Design tokens live in `Theme.swift`. State is shown with shape and text, never with red or green.

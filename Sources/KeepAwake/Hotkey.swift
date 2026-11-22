@@ -8,28 +8,34 @@ final class Hotkey {
     private var handlerRef: EventHandlerRef?
     var onPress: (() -> Void)?
 
-    var isRegistered: Bool { hotKeyRef != nil }
-
-    /// Returns false when another app already holds the shortcut.
+    /// Replaces the current shortcut. Pass nil for no shortcut.
+    /// Returns false when macOS refuses the shortcut.
     @discardableResult
-    func register(_ spec: HotkeySpec) -> Bool {
-        if handlerRef == nil {
-            var eventType = EventTypeSpec(
-                eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)
-            )
-            InstallEventHandler(GetApplicationEventTarget(), { _, _, userData in
-                guard let userData else { return noErr }
-                let hotkey = Unmanaged<Hotkey>.fromOpaque(userData).takeUnretainedValue()
-                DispatchQueue.main.async { hotkey.onPress?() }
-                return noErr
-            }, 1, &eventType, Unmanaged.passUnretained(self).toOpaque(), &handlerRef)
+    func set(_ spec: HotkeySpec?) -> Bool {
+        if let hotKeyRef {
+            UnregisterEventHotKey(hotKeyRef)
+            self.hotKeyRef = nil
         }
-        guard hotKeyRef == nil else { return true }
+        guard let spec else { return true }
+        installHandlerOnce()
         let id = EventHotKeyID(signature: OSType(0x4B_41_57_4B), id: 1) // "KAWK"
         let status = RegisterEventHotKey(
             spec.keyCode, spec.carbonModifiers, id, GetApplicationEventTarget(), 0, &hotKeyRef
         )
         if status != noErr { hotKeyRef = nil }
         return status == noErr
+    }
+
+    private func installHandlerOnce() {
+        guard handlerRef == nil else { return }
+        var eventType = EventTypeSpec(
+            eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)
+        )
+        InstallEventHandler(GetApplicationEventTarget(), { _, _, userData in
+            guard let userData else { return noErr }
+            let hotkey = Unmanaged<Hotkey>.fromOpaque(userData).takeUnretainedValue()
+            DispatchQueue.main.async { hotkey.onPress?() }
+            return noErr
+        }, 1, &eventType, Unmanaged.passUnretained(self).toOpaque(), &handlerRef)
     }
 }

@@ -4,9 +4,8 @@ import SwiftUI
 /// The panel that opens from the menu bar icon.
 struct PanelView: View {
     @ObservedObject var session: Session
+    @ObservedObject var model: PanelModel
     @Environment(\.colorScheme) private var scheme
-    /// What the keyboard shortcut does, or nil when there is no shortcut.
-    let hotkeyHint: String?
     let quit: () -> Void
 
     private var theme: Theme { Theme.current(scheme) }
@@ -22,6 +21,7 @@ struct PanelView: View {
             header
             if session.isActive { countdownCard.padding(.top, 14) }
             lengths.padding(.top, 20)
+            if model.showingSettings { settings.padding(.top, 20) }
             footer.padding(.top, 20)
         }
         .padding(14)
@@ -65,15 +65,18 @@ struct PanelView: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: Theme.radiusLarge)
-                .fill(theme.card)
-                .shadow(color: theme.shadow, radius: 6, y: 2)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: Theme.radiusLarge)
-                .strokeBorder(theme.rule, lineWidth: 1)
-        )
+        .background(card)
+    }
+
+    /// The white card that the countdown and the settings sit on.
+    private var card: some View {
+        RoundedRectangle(cornerRadius: Theme.radiusLarge)
+            .fill(theme.card)
+            .shadow(color: theme.shadow, radius: 6, y: 2)
+            .overlay(
+                RoundedRectangle(cornerRadius: Theme.radiusLarge)
+                    .strokeBorder(theme.rule, lineWidth: 1)
+            )
     }
 
     private var lengths: some View {
@@ -98,24 +101,71 @@ struct PanelView: View {
         return stride(from: 0, to: all.count, by: 3).map { Array(all[$0..<min($0 + 3, all.count)]) }
     }
 
-    /// The usual length gets the solid button, but only while nothing is
-    /// running: during a session the solid button is Stop.
+    /// The length the shortcut starts gets the solid button, but only while
+    /// nothing is running: during a session the solid button is Stop.
     private func highlight(_ minutes: Int) -> Bool {
-        !session.isActive && minutes == Settings.defaultMinutes
+        !session.isActive && minutes == model.defaultMinutes
+    }
+
+    private var settings: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            SectionLabel(text: "Settings")
+            VStack(spacing: 10) {
+                settingRow("Shortcut") {
+                    Button(model.recordingShortcut ? "Press keys" : (model.hotkey?.display ?? "None")) {
+                        model.toggleRecording()
+                    }
+                    .buttonStyle(PanelButtonStyle(kind: model.recordingShortcut ? .primary : .quiet))
+                }
+                settingRow("Shortcut starts") {
+                    Button(TimeText.length(minutes: model.defaultMinutes)) { model.cycleDefaultMinutes() }
+                        .buttonStyle(PanelButtonStyle(kind: .quiet))
+                }
+                settingRow("Open at login") {
+                    Button(model.openAtLogin ? "On" : "Off") { model.toggleOpenAtLogin() }
+                        .buttonStyle(PanelButtonStyle(kind: .quiet))
+                }
+            }
+            .padding(14)
+            .background(card)
+            Text(model.settingsNotice ?? model.version)
+                .font(.system(size: 11))
+                .foregroundColor(theme.inkSubtle)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// One setting: its name on the left, a button showing its value on the right.
+    private func settingRow<Control: View>(_ name: String, @ViewBuilder control: () -> Control) -> some View {
+        HStack {
+            Text(name)
+                .font(.system(size: 13))
+                .foregroundColor(theme.ink)
+            Spacer()
+            control().frame(width: 104)
+        }
     }
 
     private var footer: some View {
-        HStack(alignment: .firstTextBaseline) {
-            if let hotkeyHint {
-                Text(hotkeyHint)
+        HStack(alignment: .firstTextBaseline, spacing: 14) {
+            if let hint = model.hotkeyHint {
+                Text(hint)
                     .font(.system(size: 11))
                     .foregroundColor(theme.inkSubtle)
             }
             Spacer()
-            Button("Quit", action: quit)
-                .buttonStyle(.plain)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundColor(theme.inkSubtle)
+            footerButton(model.showingSettings ? "Done" : "Settings") {
+                model.stopRecording()
+                model.showingSettings.toggle()
+            }
+            footerButton("Quit", action: quit)
         }
+    }
+
+    private func footerButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(title, action: action)
+            .buttonStyle(.plain)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundColor(theme.inkSubtle)
     }
 }

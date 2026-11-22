@@ -4,28 +4,32 @@ import Foundation
 import IOKit.ps
 import KeepAwakeCore
 
-/// Settings a person can change with `defaults write com.dewierwan.keep-awake`.
+/// Settings, saved in the app's defaults. The panel changes them, and so can
+/// `defaults write com.dewierwan.keep-awake`.
 enum Settings {
     static let defaults = UserDefaults.standard
+    static let presetMinutes = [5, 10, 20, 30, 60, 120]
 
     /// Length of the session the keyboard shortcut starts.
     static var defaultMinutes: Int {
-        let value = defaults.integer(forKey: "DefaultMinutes")
-        return value > 0 ? value : 20
+        get {
+            let value = defaults.integer(forKey: "DefaultMinutes")
+            return value > 0 ? value : 20
+        }
+        set { defaults.set(newValue, forKey: "DefaultMinutes") }
     }
 
-    /// Global shortcut that starts a session, as text such as "ctrl+opt+cmd+k".
-    /// Set it to "none" for no shortcut.
+    /// Global shortcut that starts a session, saved as text such as
+    /// "ctrl+opt+cmd+k". Saved as "none" when there is no shortcut.
     static var hotkey: HotkeySpec? {
-        HotkeySpec(defaults.string(forKey: "Hotkey") ?? "ctrl+opt+cmd+k")
+        get { HotkeySpec(defaults.string(forKey: "Hotkey") ?? "ctrl+opt+cmd+k") }
+        set { defaults.set(newValue?.text ?? "none", forKey: "Hotkey") }
     }
 
     /// On battery, a session stops when the charge falls to this level.
     static var stopAtBatteryPercent: Int {
         defaults.object(forKey: "StopAtBatteryPercent") == nil ? 10 : defaults.integer(forKey: "StopAtBatteryPercent")
     }
-
-    static let presetMinutes = [5, 10, 20, 30, 60, 120]
 }
 
 /// The one session the app can run: when it ends, and what it holds while it runs.

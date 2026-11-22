@@ -6,12 +6,14 @@ public struct HotkeySpec: Equatable {
     public let carbonModifiers: UInt32
     /// How to show it to a person: "⌃⌥⌘K".
     public let display: String
+    /// How to save it: "ctrl+opt+cmd+k". Parsing this text gives the same shortcut back.
+    public let text: String
 
     // Carbon modifier bits (cmdKey, shiftKey, optionKey, controlKey).
-    static let command: UInt32 = 1 << 8
-    static let shift: UInt32 = 1 << 9
-    static let option: UInt32 = 1 << 11
-    static let control: UInt32 = 1 << 12
+    public static let command: UInt32 = 1 << 8
+    public static let shift: UInt32 = 1 << 9
+    public static let option: UInt32 = 1 << 11
+    public static let control: UInt32 = 1 << 12
 
     static let keyCodes: [String: UInt32] = [
         "a": 0, "s": 1, "d": 2, "f": 3, "h": 4, "g": 5, "z": 6, "x": 7,
@@ -21,9 +23,9 @@ public struct HotkeySpec: Equatable {
         "i": 34, "p": 35, "l": 37, "j": 38, "k": 40, "n": 45, "m": 46,
     ]
 
-    /// Parses text like "cmd+j" or "ctrl+opt+cmd+k". Needs at least one
-    /// modifier and exactly one letter or digit. Returns nil for anything else,
-    /// including "none", which means "no shortcut".
+    /// Parses text like "cmd+j" or "ctrl+opt+cmd+k": Control, Option or Command,
+    /// optionally Shift, and exactly one letter or digit. Returns nil for
+    /// anything else, including "none", which means "no shortcut".
     public init?(_ text: String) {
         var modifiers: UInt32 = 0
         var key: String?
@@ -38,14 +40,27 @@ public struct HotkeySpec: Equatable {
                 key = other
             }
         }
-        guard let key, let code = Self.keyCodes[key], modifiers != 0 else { return nil }
-        keyCode = code
+        guard let key, let code = Self.keyCodes[key] else { return nil }
+        self.init(keyCode: code, carbonModifiers: modifiers)
+    }
+
+    /// From a key press. Needs Control, Option or Command: Shift alone would
+    /// take over ordinary typing. Returns nil for keys other than letters and digits.
+    public init?(keyCode: UInt32, carbonModifiers modifiers: UInt32) {
+        let allowed = Self.control | Self.option | Self.shift | Self.command
+        guard modifiers & ~allowed == 0,
+              modifiers & (Self.control | Self.option | Self.command) != 0,
+              let key = Self.keyCodes.first(where: { $0.value == keyCode })?.key
+        else { return nil }
+        self.keyCode = keyCode
         carbonModifiers = modifiers
         var shown = ""
-        if modifiers & Self.control != 0 { shown += "⌃" }
-        if modifiers & Self.option != 0 { shown += "⌥" }
-        if modifiers & Self.shift != 0 { shown += "⇧" }
-        if modifiers & Self.command != 0 { shown += "⌘" }
+        var saved: [String] = []
+        if modifiers & Self.control != 0 { shown += "⌃"; saved.append("ctrl") }
+        if modifiers & Self.option != 0 { shown += "⌥"; saved.append("opt") }
+        if modifiers & Self.shift != 0 { shown += "⇧"; saved.append("shift") }
+        if modifiers & Self.command != 0 { shown += "⌘"; saved.append("cmd") }
         display = shown + key.uppercased()
+        text = (saved + [key]).joined(separator: "+")
     }
 }

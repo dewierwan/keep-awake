@@ -79,7 +79,17 @@ if let spec = HotkeySpec("Command + Shift + J") {
     expect(false, "shortcut: Command + Shift + J parses")
 }
 
-for bad in ["none", "", "k", "cmd", "cmd+j+k", "cmd+f13"] {
+if let spec = HotkeySpec(keyCode: 38, carbonModifiers: HotkeySpec.command | HotkeySpec.shift) {
+    expect(spec.text == "shift+cmd+j", "shortcut: a key press is saved as text")
+    expect(HotkeySpec(spec.text) == spec, "shortcut: the saved text reads back as the same shortcut")
+} else {
+    expect(false, "shortcut: a key press with Command and Shift is accepted")
+}
+expect(HotkeySpec(keyCode: 38, carbonModifiers: HotkeySpec.shift) == nil, "shortcut: Shift alone is rejected")
+expect(HotkeySpec(keyCode: 38, carbonModifiers: 0) == nil, "shortcut: a bare key press is rejected")
+expect(HotkeySpec(keyCode: 122, carbonModifiers: HotkeySpec.command) == nil, "shortcut: keys other than letters and digits are rejected")
+
+for bad in ["none", "", "k", "shift+k", "cmd", "cmd+j+k", "cmd+f13"] {
     expect(HotkeySpec(bad) == nil, "shortcut: \"\(bad)\" is rejected")
 }
 

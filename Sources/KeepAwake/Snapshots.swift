@@ -9,24 +9,27 @@ func writeSnapshots(to directory: String) {
     let folder = URL(fileURLWithPath: directory, isDirectory: true)
     try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
 
-    for active in [false, true] {
+    // Idle, running, and idle with the settings open.
+    for (name, active, showSettings) in [("idle", false, false), ("running", true, false), ("settings", false, true)] {
         for scheme in [ColorScheme.light, .dark] {
             let session = Session()
             if active { session.previewRunning(minutes: 20) }
-            let view = PanelView(session: session, hotkeyHint: "⌃⌥⌘K starts 20 min", quit: {})
+            let model = PanelModel()
+            model.showingSettings = showSettings
+            let view = PanelView(session: session, model: model, quit: {})
                 .environment(\.colorScheme, scheme)
             let renderer = ImageRenderer(content: view)
             renderer.scale = 2
-            let name = "panel-\(active ? "running" : "idle")-\(scheme == .dark ? "dark" : "light").png"
+            let file = "panel-\(name)-\(scheme == .dark ? "dark" : "light").png"
             guard let image = renderer.nsImage,
                   let tiff = image.tiffRepresentation,
                   let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:])
             else {
-                print("Could not render \(name)")
+                print("Could not render \(file)")
                 continue
             }
-            try? png.write(to: folder.appendingPathComponent(name))
-            print("Wrote \(name) (\(Int(image.size.width)) x \(Int(image.size.height)) points)")
+            try? png.write(to: folder.appendingPathComponent(file))
+            print("Wrote \(file) (\(Int(image.size.width)) x \(Int(image.size.height)) points)")
         }
     }
 }

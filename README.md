@@ -39,7 +39,7 @@ Mains power is part of the test on purpose. With the lid closed and nothing plug
 - Shows the time left next to its icon.
 - Keeps the Mac and its display awake during a session, with the lid open or closed.
 - Lets you add 10 or 30 minutes, or stop early.
-- Starts a session with a keyboard shortcut.
+- Starts a session with a keyboard shortcut that you choose.
 - Stops a session when the battery falls to 10%.
 - Picks up a running session again if the app crashes.
 
@@ -55,7 +55,7 @@ cd keep-awake
 Scripts/install.sh
 ```
 
-This builds the app, copies it to `/Applications/Keep Awake.app`, and sets it to start at login. Run the same script again to update.
+This builds the app, copies it to `/Applications/Keep Awake.app`, and starts it. Run the same script again to update.
 
 The app is built and signed on your own Mac, so there is no download to trust and no Gatekeeper warning.
 
@@ -80,20 +80,16 @@ keepawake --status     # what the app sees: display, lid, battery, session
 
 ## Settings
 
-Settings are changed with `defaults`. Restart the app afterwards.
+Click **Settings** at the bottom of the panel.
+
+- **Shortcut:** click it, then press the new shortcut. It needs Control, Option or Command, plus a letter or a digit. Delete removes the shortcut and Esc cancels.
+- **Shortcut starts:** the length of the session the shortcut starts. Click to step through the lengths.
+- **Open at login:** on by default.
+
+One setting has no button. On battery, a session stops when the charge falls to 10%. To change that level, or turn it off with 0:
 
 ```sh
-# Keyboard shortcut: any of ctrl, opt, shift, cmd, plus one letter or digit. "none" turns it off.
-defaults write com.dewierwan.keep-awake Hotkey "ctrl+opt+cmd+k"
-
-# Length of the session the shortcut starts, in minutes.
-defaults write com.dewierwan.keep-awake DefaultMinutes -int 20
-
-# On battery, stop the session at this charge. 0 turns this off.
 defaults write com.dewierwan.keep-awake StopAtBatteryPercent -int 10
-
-# Restart the app. A running session carries on.
-launchctl kickstart -k "gui/$UID/com.dewierwan.keep-awake"
 ```
 
 ## Limits
@@ -114,8 +110,9 @@ This stops the app and removes the app, its login entry and its settings.
 ## How it is built
 
 - `Sources/KeepAwakeCore` holds the logic with no system calls: the lid rule, time text and shortcut parsing. `swift run Checks` tests it.
-- `Sources/KeepAwake` is the app: the kernel switch and sleep requests (`System.swift`), the session and its timer (`Session.swift`), and the menu bar item and panel (`App.swift`, `PanelView.swift`, `Theme.swift`).
-- `Scripts/build-app.sh` builds `build/Keep Awake.app`. `Scripts/make-icon.sh` rebuilds the icon from `Resources/AppIcon.svg`.
+- `Sources/KeepAwake` is the app: the kernel switch and sleep requests (`System.swift`), the session and its timer (`Session.swift`), the menu bar item and panel (`App.swift`, `PanelView.swift`, `PanelModel.swift`, `Theme.swift`), and the login entry (`LoginItem.swift`).
+- `Scripts/build-app.sh` builds `build/Keep Awake.app`, and `Scripts/make-dmg.sh` packs it into a disk image. `Scripts/make-icon.sh` rebuilds the icon from `Resources/AppIcon.svg`.
+- Pushing a tag such as `v1.2.0` runs `.github/workflows/release.yml`, which builds, signs, notarizes and publishes a release.
 
 To check the switch on your own Mac, watch the kernel log while you start and stop sessions:
 

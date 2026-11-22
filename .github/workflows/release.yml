@@ -1,0 +1,70 @@
+name: Release
+
+# Pushing a tag such as v1.2.0 builds the app for Apple silicon and Intel,
+# signs it, has Apple notarize it, and attaches the disk image to a GitHub
+# release. Needs five repository secrets:
+#
+#   DEVELOPER_ID_P12            the Developer ID Application certificate and its key, base64
+#   DEVELOPER_ID_P12_PASSWORD   the password that protects that file
+#   NOTARY_KEY                  an App Store Connect API key (.p8 file), base64
+#   NOTARY_KEY_ID               that key's ID
+#   NOTARY_ISSUER_ID            the issuer ID shown next to the key
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Test
+        run: swift run Checks
+
+      - name: Install the signing certificate
+        env:
+          DEVELOPER_ID_P12: ${{ secrets.DEVELOPER_ID_P12 }}
+          DEVELOPER_ID_P12_PASSWORD: ${{ secrets.DEVELOPER_ID_P12_PASSWORD }}
+        run: |
+          keychain="$RUNNER_TEMP/signing.keychain-db"
+          password="$(uuidgen)"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 3600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          echo "$DEVELOPER_ID_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$DEVELOPER_ID_P12_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/certificate.p12"
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain" >/dev/null
+          security list-keychains -d user -s "$keychain" $(security list-keychains -d user | tr -d '"')
+
+      - name: Build, sign and pack
+        env:
+          UNIVERSAL: "1"
+          SIGN_IDENTITY: Developer ID Application
+        run: |
+          export VERSION="${GITHUB_REF_NAME#v}"
+          Scripts/build-app.sh
+          echo "DMG=$(Scripts/make-dmg.sh)" >> "$GITHUB_ENV"
+
+      - name: Notarize
+        env:
+          NOTARY_KEY: ${{ secrets.NOTARY_KEY }}
+          NOTARY_KEY_ID: ${{ secrets.NOTARY_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.NOTARY_ISSUER_ID }}
+        run: |
+          echo "$NOTARY_KEY" | base64 --decode > "$RUNNER_TEMP/notary.p8"
+          xcrun notarytool submit "$DMG" --key "$RUNNER_TEMP/notary.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" --wait
+          rm "$RUNNER_TEMP/notary.p8"
+          xcrun stapler staple "$DMG"
+
+      - name: Check that macOS will open it
+        run: spctl --assess --type open --context context:primary-signature --verbose "$DMG"
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "$DMG" --title "Keep Awake ${GITHUB_REF_NAME#v}" --generate-notes
