@@ -26,6 +26,10 @@ enum Settings {
         set { defaults.set(newValue?.text ?? "none", forKey: "Hotkey") }
     }
 
+    /// "Survive unplugging": true once the user has turned it on, which puts
+    /// the administrator rule in place.
+    static var surviveUnplugging: Bool { AllSleepBlock.isInstalled }
+
     /// On battery, a session stops when the charge falls to this level.
     static var stopAtBatteryPercent: Int {
         defaults.object(forKey: "StopAtBatteryPercent") == nil ? 10 : defaults.integer(forKey: "StopAtBatteryPercent")
@@ -52,6 +56,7 @@ final class Session: ObservableObject {
     private enum Key {
         static let endDate = "SessionEndDate"
         static let lidSwitchIsOurs = "LidSwitchIsOurs"
+        static let allSleepBlockIsOurs = "AllSleepBlockIsOurs"
     }
 
     var isActive: Bool { endDate != nil }
@@ -62,6 +67,14 @@ final class Session: ObservableObject {
     private var lidSwitchIsOurs: Bool {
         get { defaults.bool(forKey: Key.lidSwitchIsOurs) }
         set { defaults.set(newValue, forKey: Key.lidSwitchIsOurs) }
+    }
+
+    /// True while this app has blocked all sleep and not yet allowed it again.
+    /// Saved to disk for the same reason, and it matters more here: with all
+    /// sleep blocked, the Mac will not sleep on its own at all.
+    private var allSleepBlockIsOurs: Bool {
+        get { defaults.bool(forKey: Key.allSleepBlockIsOurs) }
+        set { defaults.set(newValue, forKey: Key.allSleepBlockIsOurs) }
     }
 
     init() {
@@ -90,6 +103,7 @@ final class Session: ObservableObject {
             begin(until: Date(timeIntervalSince1970: saved))
         } else {
             defaults.removeObject(forKey: Key.endDate)
+            allowSleepAgain()
             applyLidPolicy()
         }
     }
@@ -115,7 +129,41 @@ final class Session: ObservableObject {
         timer = nil
         blocker.release()
         self.notice = notice
+        // Allow sleep before touching the lid switch: turning the lid switch
+        // off is what makes a closed Mac go to sleep, and it must be able to.
+        allowSleepAgain()
         applyLidPolicy()
+    }
+
+    /// Blocks all sleep for the session, if "Survive unplugging" is turned on.
+    private func blockAllSleep() {
+        guard !allSleepBlockIsOurs else { return }
+        // Record first: if we crash right after the command, the next launch must still undo it.
+        allSleepBlockIsOurs = true
+        if !AllSleepBlock.set(on: true) { allSleepBlockIsOurs = false }
+    }
+
+    /// Undoes `blockAllSleep`. Keeps the record if the command fails, so the
+    /// next stop, wake or launch tries again.
+    private func allowSleepAgain() {
+        guard allSleepBlockIsOurs else { return }
+        if AllSleepBlock.set(on: false) {
+            allSleepBlockIsOurs = false
+        } else {
+            // Serious enough to say so: until this is undone the Mac will not sleep.
+            notice = "Sleep is still blocked. In Terminal, run: sudo pmset -a disablesleep 0"
+        }
+    }
+
+    /// Called when "Survive unplugging" is switched on or off in the panel, so
+    /// a session that is already running picks up the change.
+    func surviveUnpluggingChanged(isOn: Bool) {
+        if isOn, isActive {
+            blockAllSleep()
+        } else if !isOn {
+            // Removing the setting already allowed sleep again.
+            allSleepBlockIsOurs = false
+        }
     }
 
     /// Shows a running session in a picture of the panel. Holds nothing and
@@ -131,6 +179,7 @@ final class Session: ObservableObject {
         notice = nil
         defaults.set(end.timeIntervalSince1970, forKey: Key.endDate)
         blocker.hold()
+        if Settings.surviveUnplugging { blockAllSleep() }
         applyLidPolicy()
         if timer == nil {
             ticks = 0
@@ -206,6 +255,7 @@ final class Session: ObservableObject {
 
     @objc private func didWake() {
         tick()
+        if !isActive { allowSleepAgain() }
         applyLidPolicySoon()
     }
 }

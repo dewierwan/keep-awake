@@ -13,6 +13,13 @@ enum LoginItem {
 
     private static var executable: String { Bundle.main.executablePath ?? "" }
 
+    /// The name of whatever starts the app at login instead of this file, or
+    /// nil. A package manager that runs the app as its own service says so by
+    /// setting KEEP_AWAKE_LOGIN_MANAGED_BY (Homebrew's `brew services` does).
+    static var managedBy: String? {
+        ProcessInfo.processInfo.environment["KEEP_AWAKE_LOGIN_MANAGED_BY"].flatMap { $0.isEmpty ? nil : $0 }
+    }
+
     /// On when the file exists and points at this copy of the app.
     static var isOn: Bool { programInFile == executable }
 
@@ -46,6 +53,7 @@ enum LoginItem {
     /// Run once at launch. Turns "Open at login" on the first time the app
     /// runs, and repairs the file if the app has been moved since.
     static func prepareAtLaunch(defaults: UserDefaults = .standard) {
+        guard managedBy == nil else { return }
         let firstRunKey = "DidSetUpLoginItem"
         let moved = programInFile != nil && programInFile != executable
         guard moved || !defaults.bool(forKey: firstRunKey) else { return }

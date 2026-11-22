@@ -35,6 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             self?.session.start(minutes: Settings.defaultMinutes)
         }
         panel.applyHotkey = { [weak self] spec in self?.hotkey.set(spec) ?? false }
+        panel.surviveUnpluggingChanged = { [weak self] isOn in self?.session.surviveUnpluggingChanged(isOn: isOn) }
         if let spec = Settings.hotkey, !hotkey.set(spec) {
             log.error("macOS would not accept the shortcut \(spec.display, privacy: .public)")
         }
@@ -211,5 +212,7 @@ enum Main {
         print("On battery at:              \(Machine.batteryPercentWhileOnBattery.map { "\($0)%" } ?? "not on battery")")
         print("Session running:            \(text(end > Date().timeIntervalSince1970))")
         print("Lid switch turned on by us: \(text(defaults.bool(forKey: "LidSwitchIsOurs")))")
+        print("Survive unplugging:         \(AllSleepBlock.isInstalled ? "on" : "off")")
+        print("All sleep blocked now:      \(text(AllSleepBlock.isOn)) (by us: \(text(defaults.bool(forKey: "AllSleepBlockIsOurs"))))")
     }
 }

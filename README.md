@@ -86,15 +86,36 @@ Click **Settings** at the bottom of the panel.
 - **Shortcut starts:** the length of the session the shortcut starts. Click to step through the lengths.
 - **Open at login:** on by default.
 
+- **Survive unplugging:** off by default. See the next section.
+
 One setting has no button. On battery, a session stops when the charge falls to 10%. To change that level, or turn it off with 0:
 
 ```sh
 defaults write com.dewierwan.keep-awake StopAtBatteryPercent -int 10
 ```
 
+## Survive unplugging
+
+Turn this on if you start a session at your desk and then unplug and walk away with the lid closed. Without it, the Mac sleeps the moment you unplug.
+
+While a session runs, it blocks all sleep with `pmset disablesleep`, the system's own setting for that. When the session ends it allows sleep again. Blocking all sleep needs administrator rights, so turning the setting on asks for your password once and adds one line to the system's `sudo` rules, in `/etc/sudoers.d/keep-awake`:
+
+```
+yourname ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1
+```
+
+That line lets your account run those two exact commands without a password, and nothing else. Turning the setting off removes the line.
+
+While all sleep is blocked, the Mac will not sleep for any reason until the session ends. Keep Awake allows sleep again when the session ends or is stopped, when the battery reaches 10%, and when you quit. If it crashes, macOS restarts it and it carries on from where it was. To check or undo it by hand:
+
+```sh
+pmset -g | grep SleepDisabled          # 1 means all sleep is blocked
+sudo pmset -a disablesleep 0           # allow sleep again
+```
+
 ## Limits
 
-- **Unplugging an external display during a session, with the lid closed, can put the Mac to sleep.** macOS turns the switch off itself at that moment, and the sleep starts before any app can turn it back on. Open the lid first, or expect to wake the Mac after unplugging.
+- **Unplugging a display or charger during a session, with the lid closed, puts the Mac to sleep** unless you turn on Survive unplugging (below). macOS turns the lid switch off itself at that moment, and the sleep starts before any app can turn it back on.
 - **The switch is undocumented.** It is `kPMSetClamshellSleepState` on the power management root domain, the same call other keep-awake apps use. A macOS update could remove it. If that happens, sessions stop keeping a closed Mac awake, and the Mac sleeps on lid close as normal.
 - **Tested on one setup:** an Apple silicon MacBook on macOS 26 with a USB-C display that also supplies power.
 - **A closed MacBook in a bag gets hot.** A session keeps it awake until the timer ends. Keep sessions short when the Mac is going in a bag.
@@ -105,12 +126,12 @@ defaults write com.dewierwan.keep-awake StopAtBatteryPercent -int 10
 Scripts/uninstall.sh
 ```
 
-This stops the app and removes the app, its login entry and its settings.
+This stops the app and removes the app, its login entry, its settings, and the Survive unplugging rule if you turned that on.
 
 ## How it is built
 
 - `Sources/KeepAwakeCore` holds the logic with no system calls: the lid rule, time text and shortcut parsing. `swift run Checks` tests it.
-- `Sources/KeepAwake` is the app: the kernel switch and sleep requests (`System.swift`), the session and its timer (`Session.swift`), the menu bar item and panel (`App.swift`, `PanelView.swift`, `PanelModel.swift`, `Theme.swift`), and the login entry (`LoginItem.swift`).
+- `Sources/KeepAwake` is the app: the kernel switch and sleep requests (`System.swift`), the session and its timer (`Session.swift`), the menu bar item and panel (`App.swift`, `PanelView.swift`, `PanelModel.swift`, `Theme.swift`), the login entry (`LoginItem.swift`), and Survive unplugging (`AllSleepBlock.swift`).
 - `Scripts/build-app.sh` builds `build/Keep Awake.app`, and `Scripts/make-dmg.sh` packs it into a disk image. `Scripts/make-icon.sh` rebuilds the icon from `Resources/AppIcon.svg`.
 - Pushing a tag such as `v1.2.0` runs `.github/workflows/release.yml`, which builds, signs, notarizes and publishes a release.
 

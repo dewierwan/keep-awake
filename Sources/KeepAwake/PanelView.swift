@@ -122,7 +122,11 @@ struct PanelView: View {
                         .buttonStyle(PanelButtonStyle(kind: .quiet))
                 }
                 settingRow("Open at login") {
-                    Button(model.openAtLogin ? "On" : "Off") { model.toggleOpenAtLogin() }
+                    Button(model.openAtLoginLabel) { model.toggleOpenAtLogin() }
+                        .buttonStyle(PanelButtonStyle(kind: .quiet))
+                }
+                settingRow("Survive unplugging") {
+                    Button(model.surviveUnplugging ? "On" : "Off") { model.toggleSurviveUnplugging() }
                         .buttonStyle(PanelButtonStyle(kind: .quiet))
                 }
             }
@@ -142,7 +146,7 @@ struct PanelView: View {
                 .font(.system(size: 13))
                 .foregroundColor(theme.ink)
             Spacer()
-            control().frame(width: 104)
+            control().frame(width: 96)
         }
     }
 

@@ -10,11 +10,14 @@ final class PanelModel: ObservableObject {
     @Published private(set) var hotkey: HotkeySpec? = Settings.hotkey
     @Published private(set) var defaultMinutes = Settings.defaultMinutes
     @Published private(set) var openAtLogin = LoginItem.isOn
+    @Published private(set) var surviveUnplugging = Settings.surviveUnplugging
     /// A short message under the settings, such as why a shortcut was refused.
     @Published private(set) var settingsNotice: String?
 
     /// Registers a shortcut with macOS; returns false if macOS refuses it.
     var applyHotkey: (HotkeySpec?) -> Bool = { _ in true }
+    /// Tells the session that "Survive unplugging" changed.
+    var surviveUnpluggingChanged: (Bool) -> Void = { _ in }
     private var keyMonitor: Any?
 
     var hotkeyHint: String? {
@@ -33,6 +36,27 @@ final class PanelModel: ObservableObject {
         hotkey = Settings.hotkey
         defaultMinutes = Settings.defaultMinutes
         openAtLogin = LoginItem.isOn
+        surviveUnplugging = Settings.surviveUnplugging
+    }
+
+    /// Turns "Survive unplugging" on or off. Either way macOS asks for the
+    /// administrator password, because the change is to the system's sudo rules.
+    func toggleSurviveUnplugging() {
+        do {
+            if surviveUnplugging {
+                try AllSleepBlock.remove()
+            } else {
+                try AllSleepBlock.install()
+            }
+            settingsNotice = nil
+        } catch AllSleepBlock.SetupError.cancelled {
+            settingsNotice = nil
+        } catch {
+            settingsNotice = "Could not change Survive unplugging."
+            log.error("Survive unplugging: \(String(describing: error), privacy: .public)")
+        }
+        surviveUnplugging = Settings.surviveUnplugging
+        surviveUnpluggingChanged(surviveUnplugging)
     }
 
     /// Steps the shortcut's session length to the next preset.
@@ -43,7 +67,14 @@ final class PanelModel: ObservableObject {
         defaultMinutes = next
     }
 
+    /// What the "Open at login" button says.
+    var openAtLoginLabel: String { LoginItem.managedBy ?? (openAtLogin ? "On" : "Off") }
+
     func toggleOpenAtLogin() {
+        if let manager = LoginItem.managedBy {
+            settingsNotice = "\(manager) starts Keep Awake at login. Change it there."
+            return
+        }
         do {
             try LoginItem.set(on: !openAtLogin)
             settingsNotice = nil

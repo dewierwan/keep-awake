@@ -93,6 +93,17 @@ for bad in ["none", "", "k", "shift+k", "cmd", "cmd+j+k", "cmd+f13"] {
     expect(HotkeySpec(bad) == nil, "shortcut: \"\(bad)\" is rejected")
 }
 
+// MARK: The administrator rule for "Survive unplugging"
+
+expect(
+    SudoersRule.line(user: "sam") == "sam ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 0, /usr/bin/pmset -a disablesleep 1",
+    "sudo rule: allows exactly the two pmset commands for one user"
+)
+expect(SudoersRule.line(user: "sam.lee_2-x") != nil, "sudo rule: dots, underscores, hyphens and digits are fine")
+for bad in ["", "-sam", "sam lee", "sam,ALL", "sam\nroot ALL=(ALL) ALL", "sam'", "sam;x", "sám", "ALL=(ALL)"] {
+    expect(SudoersRule.line(user: bad) == nil, "sudo rule: user name \"\(bad)\" is refused")
+}
+
 if failures > 0 {
     print("\(failures) check(s) failed")
     exit(1)
