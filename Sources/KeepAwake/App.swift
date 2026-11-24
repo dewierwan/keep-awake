@@ -12,6 +12,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var subscriptions: Set<AnyCancellable> = []
     private var termination: DispatchSourceSignal?
     private var shownActive = false
+    /// An invisible window that marks where the icon was when the panel opened.
+    private var anchor: NSWindow?
+    /// When the panel last closed, in seconds since the Mac started.
+    private var panelClosedAt: TimeInterval = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -95,7 +99,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
             popover.performClose(nil)
             return
         }
-        guard let button = statusItem.button else { return }
+        // A click on the icon while the panel is open closes the panel first,
+        // as a click outside it, and then arrives here. Don't open it again.
+        if ProcessInfo.processInfo.systemUptime - panelClosedAt < 0.3 { return }
+        guard let button = statusItem.button, let buttonWindow = button.window else { return }
         panel.refresh()
         let controller = NSHostingController(
             rootView: PanelView(session: session, model: panel, quit: { NSApp.terminate(nil) })
@@ -105,13 +112,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         // A menu bar app is never frontmost, and a popover only closes on an
         // outside click when its app is.
         NSApp.activate(ignoringOtherApps: true)
-        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        let anchorView = pinAnchor(to: iconFrameOnScreen(button, in: buttonWindow))
+        popover.show(relativeTo: anchorView.bounds, of: anchorView, preferredEdge: .minY)
         popover.contentViewController?.view.window?.makeKey()
+    }
+
+    /// Where the icon is on the screen. While the menu bar has slid away the
+    /// icon sits just above the top of the screen, and a popover hung from a
+    /// spot that is on no screen opens at the left edge. So in that case this
+    /// gives the spot the icon slides back down to.
+    private func iconFrameOnScreen(_ button: NSStatusBarButton, in window: NSWindow) -> NSRect {
+        var frame = window.convertToScreen(button.convert(button.bounds, to: nil))
+        let middle = NSPoint(x: frame.midX, y: frame.midY)
+        let screens = NSScreen.screens
+        let screen = screens.first { $0.frame.contains(middle) }
+            ?? screens.first { $0.frame.minX <= middle.x && middle.x < $0.frame.maxX }
+            ?? NSScreen.main
+        if let top = screen?.frame.maxY, frame.maxY > top {
+            frame.origin.y = top - frame.height
+        }
+        return frame
+    }
+
+    /// Puts an invisible window where the icon is now, for the panel to hang from.
+    ///
+    /// The panel must not hang from the icon itself. Starting or stopping a
+    /// session changes the icon's width, and a popover moves to follow the
+    /// thing it hangs from. When the menu bar has slid away (another app is in
+    /// full screen), the icon is above the top of the screen, and a popover
+    /// that follows it there jumps to the left edge. So the icon's position
+    /// is read once, when the panel opens, and kept.
+    private func pinAnchor(to frame: NSRect) -> NSView {
+        let window = anchor ?? {
+            let window = NSWindow(contentRect: frame, styleMask: .borderless, backing: .buffered, defer: false)
+            window.isOpaque = false
+            window.backgroundColor = .clear
+            window.hasShadow = false
+            window.ignoresMouseEvents = true
+            window.isReleasedWhenClosed = false
+            window.level = .statusBar
+            // Show on every desktop, including over an app in full screen.
+            window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .ignoresCycle]
+            window.contentView = NSView()
+            return window
+        }()
+        anchor = window
+        window.setFrame(frame, display: false)
+        window.orderFrontRegardless()
+        return window.contentView!
     }
 
     func popoverDidClose(_ notification: Notification) {
         panel.stopRecording()
         popover.contentViewController = nil
+        anchor?.orderOut(nil)
+        panelClosedAt = ProcessInfo.processInfo.systemUptime
     }
 }
 
